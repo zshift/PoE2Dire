@@ -1,0 +1,40 @@
+#PoE2Dire-type-search {
+  position: fixed;
+  top: .85rem;
+  right: .85rem;
+  z-index: 2147483647;
+  max-width: min(24rem, calc(100vw - 8rem));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  padding: .55rem .7rem;
+  border: 1px solid rgba(219, 80, 54, .78);
+  border-radius: 2px;
+  color: #f4efe8;
+  background: rgba(15, 17, 20, .94);
+  box-shadow: 0 .4rem 1rem rgba(0,0,0,.42);
+  font: 800 .78rem/1 Arial, Helvetica, sans-serif;
+  letter-spacing: .08em;
+}
+
+#PoE2Dire-type-search.pdp-type-search-empty {
+  border-color: rgba(154, 163, 172, .7);
+  color: #cbd3d8;
+}
+
+.pdp-type-search-hit {
+  background: rgba(241, 70, 46, .11);
+  box-shadow: inset 0 0 0 1px rgba(241, 70, 46, .28);
+}
+
+.pdp-type-search-current {
+  background: rgba(241, 70, 46, .18);
+  box-shadow: inset 0 0 0 2px rgba(241, 70, 46, .72), 0 .45rem 1rem rgba(0,0,0,.24);
+}
+
+.pdp-changes li.pdp-type-search-hit {
+  padding: .08rem .22rem;
+  margin-left: -.22rem;
+  border-radius: 2px;
+}

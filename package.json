@@ -1,0 +1,9 @@
+{
+  "name": "PoE2Dire",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "build": "node scripts/build-extension.js",
+    "pack": "node scripts/build-extension.js --pack"
+  }
+}
