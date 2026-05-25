@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "PoE2Dire Patch Notes",
+  "name": "PoE2Dire",
   "short_name": "PoE2Dire",
   "version": "__VERSION__",
   "description": "Render Path of Exile patch notes in a Dota-style format.",

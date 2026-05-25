@@ -17,6 +17,7 @@ const TARGETS = ["chrome", "firefox"];
 const CORE_FILE = `${PROJECT_NAME}-core.js`;
 const BOOKMARKLET_FILE = `${PROJECT_NAME}-bookmarklet.js`;
 const CORE_CSS_FILE = "styles.css";
+const PRIVACY_PAGE_FILE = "privacy.html";
 
 const CORE_FRAGMENTS = [
   "config.js",
@@ -53,6 +54,10 @@ function main() {
   const bookmarkletPath = path.join(DIST, "gist", BOOKMARKLET_FILE);
   fs.mkdirSync(path.dirname(bookmarkletPath), { recursive: true });
   fs.writeFileSync(bookmarkletPath, buildCoreBundle(css));
+  copyFile(
+    path.join(SRC, "pages", PRIVACY_PAGE_FILE),
+    path.join(DIST, "gist", PRIVACY_PAGE_FILE)
+  );
 
   if (shouldPack) {
     for (const target of TARGETS) {
