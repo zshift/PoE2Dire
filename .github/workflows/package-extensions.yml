@@ -31,14 +31,15 @@ jobs:
         run: npm run pack
 
       - name: Upload extension packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PoE2Dire-extension-packages
           path: dist/packages/*.zip
+          if-no-files-found: error
 
       - name: Upload phone bookmarklet pages artifact
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: dist/gist
 
@@ -53,4 +54,4 @@ jobs:
     steps:
       - name: Deploy phone bookmarklet to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
