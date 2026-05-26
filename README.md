@@ -1,9 +1,10 @@
 > [!CAUTION]
 > You are too early here! I'm still waiting for stores to approve the plugin for you to use! But if you know what you are doing, feel free to stay, otherwise, please, comeback later!
 
+
 # PoE2Dire
 
-Extension to rendering Path of Exile patch notes in a Dota2-style layout. [For this reddit thread](https://www.reddit.com/r/PathOfExile2/comments/1tkazjr/can_someone_explain_to_me_why_ggg_doesnt_present/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)
+Extension to rendering Path of Exile patch notes in a Dota2-style layout (Enghlish only at this moment). [For this reddit thread](https://www.reddit.com/r/PathOfExile2/comments/1tkazjr/can_someone_explain_to_me_why_ggg_doesnt_present/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)
 
 <img width="1280" height="800" alt="01-overview" src="https://github.com/user-attachments/assets/4efc326c-270c-4a18-b46b-d3ca8be557a6" />
 <img width="1201" height="1021" alt="showcase" src="https://github.com/user-attachments/assets/c41b4e58-084c-4a46-969e-76e239129df7" />
@@ -17,11 +18,14 @@ https://www.pathofexile.com/forum/*
 
 It still declares access to `poewiki.net` and `poe2wiki.net` for icons lookup.
 
+
 ## How to use?
+
 1. Go to any poe patch note forum page ([like this hot one](https://www.pathofexile.com/forum/view-thread/3932540))
 2. Click PoE2Dire icon on top to activate it <img width="114" height="79" alt="image" src="https://github.com/user-attachments/assets/2b800f16-d7a4-4f35-b4cc-65940e61ee31" /> (if you don't see it, you need to pin it, use mosaic icon, find it, click it there)
 3. Done
 4. You can click it again to deactivate, or simply reload.
+
 
 ## Dota2 Style Search Feature
 
@@ -33,6 +37,7 @@ The second feature of this extension is the ability to search by just start typi
 - You can click enter to move to the next result. 
 - It auto clear after 2 seconds, so you can easily start searching for a new thing next, so try to search for `daggers` next.
 
+
 ## Install options
 
 ### Install on Chrome
@@ -40,10 +45,12 @@ The second feature of this extension is the ability to search by just start typi
 
 TBD - Waiting for approval
 
+
 ### Install on Firefox
 > consider leaving a review, so more people find it!
 
 [Firefox Browser Add-ons Page](https://addons.mozilla.org/en-US/firefox/addon/poe2dire/) - Waiting for approval
+
 
 ### Do you guys have phones?
 
@@ -77,9 +84,18 @@ How to use it:
 5. Open a Path of Exile forum patch-notes page.
 6. Run the bookmark (in the most browsers you can write the name of the bookmark to see and activate it)
 
+
 ## Not working for you?
 
 Feel free to open an issue on github, I will do my best to fix it for you, but no promises.
+
+
+## Contribution
+
+Please, feel free to ask a question, open PR, issue, or fork it if you want. 
+It lacks documentation, but messy js code must be clear enough to follow. 
+But, keep in mind, my decades of writing hacky js code might feel strange, cause I never actually used it to make a proper project, only scripts with jQuery.
+
 
 ## Support 🌠
 
