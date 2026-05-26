@@ -40,14 +40,15 @@ The second feature of this extension is the ability to search by just start typi
 
 ## Install options
 
-### Install on Chrome
+
 > please, consider leaving a review, so more people find it!
 
-TBD - Waiting for approval
 
+### Install on Chrome
+
+[Chrome WebStore](https://chromewebstore.google.com/detail/paekoknkbpfidmpabiikofkemegpfgnh?utm_source=item-share-cb) - Waiting for approval
 
 ### Install on Firefox
-> consider leaving a review, so more people find it!
 
 [Firefox Browser Add-ons Page](https://addons.mozilla.org/en-US/firefox/addon/poe2dire/) - Waiting for approval
 
