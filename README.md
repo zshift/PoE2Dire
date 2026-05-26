@@ -3,7 +3,7 @@
 
 # PoE2Dire
 
-Extension to rendering Path of Exile patch notes in a Dota2-style layout.
+Extension to rendering Path of Exile patch notes in a Dota2-style layout. [For this reddit thread](https://www.reddit.com/r/PathOfExile2/comments/1tkazjr/can_someone_explain_to_me_why_ggg_doesnt_present/?utm_source=share&utm_medium=web3x&utm_name=web3xcss&utm_term=1&utm_content=share_button)
 
 <img width="1280" height="800" alt="01-overview" src="https://github.com/user-attachments/assets/4efc326c-270c-4a18-b46b-d3ca8be557a6" />
 <img width="1201" height="1021" alt="showcase" src="https://github.com/user-attachments/assets/c41b4e58-084c-4a46-969e-76e239129df7" />
