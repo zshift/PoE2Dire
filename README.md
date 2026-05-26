@@ -33,17 +33,24 @@ The second feature of this extension is the ability to search by just start typi
 - You can click enter to move to the next result. 
 - It auto clear after 2 seconds, so you can easily start searching for a new thing next, so try to search for `daggers` next.
 
-## Install on Chrome
+## Install options
+
+### Install on Chrome
+> please, consider leaving a review, so more people find it!
 
 TBD - Waiting for approval
 
-## Install on Firefox
+### Install on Firefox
+> consider leaving a review, so more people find it!
 
 [Firefox Browser Add-ons Page](https://addons.mozilla.org/en-US/firefox/addon/poe2dire/) - Waiting for approval
 
-## Do you guys have phones?
+### Do you guys have phones?
 
-This is for phones or browsers where you cannot/don't want to install the extension.
+This is for phones or browsers where you cannot/don't want to install the extension. 
+
+> [!NOTE]
+> Some mobile browsers can block bookmarklet scripts, so this may not work for everyone, tested on `Android` with `Brave`. Feel free to open an issue, maybe someone would have solution for your case, or at least suggests you a different phone :)
 
 > [!CAUTION]
 > This will download the remote code (`https://aisatan.github.io/PoE2Dire/PoE2Dire-bookmarklet.js`) and **execute** it with your browser.
@@ -70,12 +77,18 @@ How to use it:
 5. Open a Path of Exile forum patch-notes page.
 6. Run the bookmark (in the most browsers you can write the name of the bookmark to see and activate it)
 
-Some mobile browsers block bookmarklet scripts, so this may not work everywhere, tested on `Brave` only.
+## Not working for you?
+
+Feel free to open an issue on github, I will do my best to fix it for you, but no promises.
 
 ## Support 🌠
 
-Please, consider any of this to support:
+Please, consider any of this little support options:
 
-- Leaving a github star ⭐
-- [Buy me a coffee <3](https://buymeacoffee.com/aisatan)
-- [Donate to Blender Foundation](https://fund.blender.org/donate-once/)
+⭐ Leave a GitHub Star ⭐
+
+☕ [Buy me a coffee <3](https://buymeacoffee.com/aisatan) ☕
+
+<img width="32" height="32" alt="blender_emoji_transparent_32" src="https://github.com/user-attachments/assets/02ac03f9-3dd0-4674-8ea2-03b38e0e1f81" />[Donate to Blender Foundation](https://fund.blender.org/donate-once/)
+<img width="32" height="32" alt="blender_emoji_transparent_32" src="https://github.com/user-attachments/assets/1e6fa180-211d-4658-9b4f-c549a336a75e" />
+
