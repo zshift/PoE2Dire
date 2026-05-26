@@ -16,21 +16,25 @@ It still declares access to `poewiki.net` and `poe2wiki.net` for icons lookup.
 
 The extension does not auto-convert pages. Click the PoE2Dire toolbar icon on a forum thread to activate it. Click it again or reload to restore the original page.
 
-## Chrome
+## Install on Chrome
 
 TBD
 
-## Firefox
+## Install on Firefox
 
-TBD
+[Firefox Browser Add-ons Page](https://addons.mozilla.org/en-US/firefox/addon/poe2dire/)
 
 ## Phones
 
-This is for phones or browsers where you cannot install the extension.
+> Note! This will download the remote code (`https://aisatan.github.io/PoE2Dire/PoE2Dire-bookmarklet.js`) and executing it on your browser. It's not required, but I suggest to stay safe and use the incognite mode.
 
-<img width="1080" height="2410" alt="showcase_mobile" src="https://github.com/user-attachments/assets/c5d5b216-ea17-4733-be05-a1586e827622" />
+This is for phones or browsers where you cannot/don't want to install the extension.
 
-Video: TBD
+Video installation on phone: 
+
+https://github.com/user-attachments/assets/a034d803-7d16-443c-8e9b-e5f683d9e309
+
+better quality: https://youtube.com/shorts/AmYBZYfP4YY
 
 The phone bookmarklet loads the published single-file build from GitHub Pages:
 
@@ -40,13 +44,14 @@ javascript:(function(){var s=document.createElement('script');s.src='https://ais
 
 How to use it:
 
-1. Create a browser bookmark.
-2. Edit the bookmark URL.
+1. Create a browser bookmark (any site will do)
+2. Edit the bookmark URL and Name.
 3. Paste the full `javascript:` code above as the bookmark URL.
-4. Open a Path of Exile forum patch-notes page.
-5. Run the bookmark.
+4. Put some easy accessable name, like `0000 poe2dire`
+5. Open a Path of Exile forum patch-notes page.
+6. Run the bookmark (in the most browsers you can write the name of the bookmark to see and activate it)
 
-Some mobile browsers block bookmarklet scripts, so this may not work everywhere.
+Some mobile browsers block bookmarklet scripts, so this may not work everywhere, tested on `Brave` only.
 
 ## Support 🌠
 
