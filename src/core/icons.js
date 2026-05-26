@@ -1,4 +1,4 @@
-  async function resolveIcons(patch) {
+  async function resolveIcons(patch, onUpdate) {
     const groups = patch.sections.flatMap((section) => section.groups);
     const jobs = collectIconJobs(groups);
 
@@ -21,20 +21,46 @@
     const knownMissing = new Set();
     const lookupFailed = new Set();
     const stored = await readStoredIconResults(store, jobs, storeKeys, resolved, knownMissing);
+    applyResolvedIconResults(groups, resolved);
+    applyMissingIconResults(groups, knownMissing);
+    notifyIconUpdate(onUpdate, patch);
 
-    for (const endpoint of endpoints) {
+    for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex += 1) {
+      const endpoint = endpoints[endpointIndex];
+      const isLastEndpoint = endpointIndex === endpoints.length - 1;
       const missingJobs = jobs.filter((job) => !resolved.has(job.key) && !knownMissing.has(job.key));
       if (!missingJobs.length) break;
 
-      const result = await queryWikiIconSource(endpoint, missingJobs);
+      const result = await queryWikiIconSource(endpoint, missingJobs, (job, image, failed) => {
+        if (resolved.has(job.key) || knownMissing.has(job.key)) return;
+
+        if (image) {
+          resolved.set(job.key, image);
+          applyResolvedIconResults(groups, new Map([[job.key, image]]));
+          notifyIconUpdate(onUpdate, patch);
+          return;
+        }
+
+        if (!isLastEndpoint) return;
+
+        if (failed) {
+          lookupFailed.add(job.key);
+          applyDefaultIconResults(groups, new Set([job.key]));
+        } else {
+          knownMissing.add(job.key);
+          applyMissingIconResults(groups, new Set([job.key]));
+        }
+        notifyIconUpdate(onUpdate, patch);
+      });
       result.found.forEach((image, key) => resolved.set(key, image));
       result.failed.forEach((key) => lookupFailed.add(key));
     }
 
-    applyIconResults(groups, resolved, jobs);
+    applyIconResults(groups, resolved, jobs, lookupFailed);
     await writeStoredIconResults(store, jobs, storeKeys, stored, resolved, lookupFailed);
 
     state.wikiDone = true;
+    notifyIconUpdate(onUpdate, patch);
     return patch;
   }
 
@@ -44,34 +70,103 @@
       .filter(isIconCandidate)
       .filter((group) => group.wikiTitle);
 
-    const titles = unique(candidates.map((group) => group.wikiTitle));
-    const kinds = new Map(candidates.map((group) => [normalKey(group.wikiTitle), group.iconKind]));
+    const seen = new Set();
+    const jobs = [];
 
-    return titles.map((title) => ({
-      title,
-      key: normalKey(title),
-      kind: kinds.get(normalKey(title)) || "general",
-    }));
+    candidates.forEach((group) => {
+      const title = cleanTitle(group.wikiTitle);
+      const kind = group.iconKind || "general";
+      const key = iconJobKey(title, kind);
+      if (!title || seen.has(key)) return;
+      seen.add(key);
+      jobs.push({ title, key, kind });
+    });
+
+    return interleaveIconJobs(jobs);
+  }
+
+  function interleaveIconJobs(jobs) {
+    const primary = jobs.filter((job) => job.kind === "ascendancy" || job.kind === "skill");
+    const rest = jobs.filter((job) => job.kind !== "ascendancy" && job.kind !== "skill");
+    const order = ["support", "item", "passive", "monster", "general"];
+    const buckets = new Map(order.map((kind) => [kind, []]));
+    rest.forEach((job) => {
+      const bucket = buckets.get(job.kind) || buckets.get("general");
+      bucket.push(job);
+    });
+
+    const result = primary;
+    while (bucketsHaveJobs(buckets)) {
+      order.forEach((kind) => {
+        const job = buckets.get(kind)?.shift();
+        if (job) result.push(job);
+      });
+    }
+    return result;
+  }
+
+  function bucketsHaveJobs(buckets) {
+    return Array.from(buckets.values()).some((bucket) => bucket.length);
   }
 
   function apiEndpointsForPatch(patch) {
     return /Path of Exile 2/i.test(patch.title)
-      ? CONFIG.apiEndpoints
-      : CONFIG.apiEndpoints.slice().reverse();
+      ? [CONFIG.apiEndpoints[0]]
+      : [CONFIG.apiEndpoints[1]];
   }
 
-  function applyIconResults(groups, resolved, jobs) {
+  function applyIconResults(groups, resolved, jobs, lookupFailed) {
     const attempted = new Set(jobs.map((job) => job.key));
 
     for (const group of groups) {
-      const key = normalKey(group.wikiTitle);
+      const key = iconJobKey(group.wikiTitle, group.iconKind);
       const image = resolved.get(key);
 
       if (image) {
         group.icon = image.url;
         group.source = image.source;
-      } else if (attempted.has(key) && isIconCandidate(group)) {
+      } else if (attempted.has(key) && !lookupFailed.has(key) && isIconCandidate(group)) {
         group.source = "missing";
       }
     }
+  }
+
+  function applyResolvedIconResults(groups, resolved) {
+    if (!resolved.size) return;
+
+    for (const group of groups) {
+      const image = resolved.get(iconJobKey(group.wikiTitle, group.iconKind));
+      if (!image) continue;
+
+      group.icon = image.url;
+      group.source = image.source;
+    }
+  }
+
+  function applyMissingIconResults(groups, missing) {
+    if (!missing.size) return;
+
+    for (const group of groups) {
+      if (missing.has(iconJobKey(group.wikiTitle, group.iconKind)) && isIconCandidate(group)) {
+        group.source = "missing";
+      }
+    }
+  }
+
+  function applyDefaultIconResults(groups, defaults) {
+    if (!defaults.size) return;
+
+    for (const group of groups) {
+      if (defaults.has(iconJobKey(group.wikiTitle, group.iconKind)) && isIconCandidate(group) && !group.icon) {
+        group.source = "default";
+      }
+    }
+  }
+
+  function notifyIconUpdate(onUpdate, patch) {
+    if (onUpdate) onUpdate(patch);
+  }
+
+  function iconJobKey(title, kind) {
+    return `${kind || "general"}:${normalKey(title)}`;
   }

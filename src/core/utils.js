@@ -109,11 +109,11 @@
   }
 
   function classifyGroup(sectionTitle, title, hint) {
-    const titleKind = classifyLocalEntity(title);
-    if (titleKind !== "general") return titleKind;
-
     const sectionKind = classify(sectionTitle);
     if (sectionKind !== "general") return sectionKind;
+
+    const titleKind = classifyLocalEntity(title);
+    if (titleKind !== "general") return titleKind;
 
     return classifyLocalEntity(hint || "");
   }

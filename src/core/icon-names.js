@@ -6,13 +6,14 @@
     [clean, commaPrefix].forEach((candidate) => {
       if (!candidate) return;
 
-      titles.push(candidate);
-      addSupportTitle(titles, candidate, kind);
+      if (kind === "support") addSupportLookupTitles(titles, candidate);
+      else titles.push(candidate);
 
-      const romanBase = romanTierBaseTitle(candidate);
+      const romanSource = kind === "support" ? supportBaseTitle(candidate) || candidate : candidate;
+      const romanBase = romanTierBaseTitle(romanSource);
       if (romanBase) {
-        titles.push(romanBase);
-        addSupportTitle(titles, romanBase, kind);
+        if (kind === "support") addSupportLookupTitles(titles, romanBase);
+        else titles.push(romanBase);
       }
 
       if (kind === "ascendancy" || kind === "passive") {
@@ -21,18 +22,36 @@
       }
 
       if (kind === "skill" || kind === "support") {
-        const baseSkill = baseTransfiguredTitle(candidate);
-        if (baseSkill) titles.push(baseSkill);
+        const baseSkill = baseTransfiguredTitle(romanSource);
+        if (baseSkill) {
+          if (kind === "support") addSupportLookupTitles(titles, baseSkill);
+          else titles.push(baseSkill);
+        }
       }
     });
 
     return unique(titles);
   }
 
-  function addSupportTitle(titles, title, kind) {
-    if (kind === "support" && title && !/\bSupport$/i.test(cleanTitle(title))) {
+  function addSupportLookupTitles(titles, title) {
+    const clean = cleanTitle(title);
+    if (!clean) return;
+
+    titles.push(clean);
+    const base = supportBaseTitle(clean);
+    if (base) titles.push(base);
+    else addSupportTitle(titles, clean);
+  }
+
+  function addSupportTitle(titles, title) {
+    if (title && !/\bSupport$/i.test(cleanTitle(title))) {
       titles.push(`${cleanTitle(title)} Support`);
     }
+  }
+
+  function supportBaseTitle(title) {
+    const clean = cleanTitle(title);
+    return /\s+Support$/i.test(clean) ? clean.replace(/\s+Support$/i, "").trim() : "";
   }
 
   function commaPrefixTitle(title) {

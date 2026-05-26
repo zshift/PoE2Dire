@@ -48,7 +48,8 @@
       if (entry.url) {
         resolved.set(job.key, { url: entry.url, source: entry.source || "icon-cache" });
       } else if (entry.missing) {
-        knownMissing.add(job.key);
+        if (shouldCacheMissingIcon(job)) knownMissing.add(job.key);
+        else stored.delete(storeKeys.get(job.key));
       }
     }
 
@@ -63,6 +64,8 @@
       if (!key || stored.has(key) || lookupFailed.has(job.key)) continue;
 
       const image = resolved.get(job.key);
+      if (!image && !shouldCacheMissingIcon(job)) continue;
+
       writes.set(key, image ? {
         url: image.url,
         source: image.source,
@@ -76,6 +79,10 @@
     }
 
     await store.setMany(writes);
+  }
+
+  function shouldCacheMissingIcon(job) {
+    return job.kind !== "support";
   }
 
   function storageIconStore(readMany, writeMany, removeMany) {

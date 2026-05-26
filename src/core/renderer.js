@@ -1,3 +1,7 @@
+  const iconImageQueue = [];
+  const iconImageCache = new Map();
+  let activeIconImageRequests = 0;
+
   function renderPatchPage(doc, sourceRoot, patch) {
     doc.getElementById("PoE2Dire-root")?.remove();
 
@@ -155,7 +159,42 @@
     const meta = el("div", "pdp-group-meta", groupLabel(group));
     const title = el("div", "pdp-group-title", group.title);
     const items = el("ul", "pdp-changes", group.items.map((item) => el("li", "", highlightChange(doc, item))));
-    return el("article", "pdp-group", [icon, el("div", "pdp-group-body", [title, meta, items])]);
+    const article = el("article", "pdp-group", [icon, el("div", "pdp-group-body", [title, meta, items])]);
+    article.dataset.pdpIconKey = iconDomKey(group);
+    return article;
+  }
+
+  function updatePatchIcons(doc, patch) {
+    const root = doc.getElementById("PoE2Dire-root");
+    if (!root) return false;
+
+    const groups = new Map(
+      patch.sections
+        .flatMap((section) => section.groups)
+        .map((group) => [iconDomKey(group), group])
+    );
+
+    root.querySelectorAll(".pdp-group[data-pdp-icon-key]").forEach((article) => {
+      const group = groups.get(article.dataset.pdpIconKey || "");
+      if (!group) return;
+
+      const oldIcon = article.querySelector(".pdp-icon");
+      const nextState = iconStateClass(group, !group.icon);
+      const nextUrl = group.icon || CONFIG.fallbackIcon || "";
+      if (oldIcon?.dataset.pdpIconState === nextState && oldIcon.dataset.pdpIconUrl === nextUrl) return;
+
+      oldIcon?.replaceWith(renderIcon(group));
+    });
+
+    return true;
+  }
+
+  function iconDomKey(group) {
+    return [
+      group.iconKind || "general",
+      normalKey(group.wikiTitle || group.title),
+      normalKey(group.title),
+    ].join(":");
   }
 
   function groupLabel(group) {
@@ -180,26 +219,180 @@
     const isFallback = !group.icon;
     const icon = group.icon || CONFIG.fallbackIcon;
     if (icon) {
-      box.classList.add(iconStateClass(group, isFallback));
+      const finalClass = iconStateClass(group, isFallback);
+      box.dataset.pdpIconState = finalClass;
+      box.dataset.pdpIconUrl = icon;
+      box.classList.add(initialIconStateClass(finalClass));
       const img = el("img", "", "");
       img.alt = "";
       img.loading = "eager";
       img.decoding = "async";
       img.referrerPolicy = "no-referrer";
-      img.src = icon;
-      img.onerror = () => {
-        if (img.src !== CONFIG.fallbackIcon) {
-          img.src = CONFIG.fallbackIcon;
-          return;
-        }
-        img.remove();
-        box.textContent = iconInitials(group.title);
-      };
+      setIconImageSrc(img, box, group.title, icon, CONFIG.fallbackIcon, finalClass);
       box.append(img);
     } else {
       box.textContent = iconInitials(group.title);
     }
     return box;
+  }
+
+  function setIconImageSrc(img, box, title, icon, fallbackIcon, finalClass) {
+    renderableIconUrlWithFallbacks(icon)
+      .then((src) => {
+        img.onload = () => setIconStateClass(box, finalClass);
+        img.onerror = () => {
+          if (icon !== fallbackIcon && fallbackIcon) {
+            showFallbackIcon(img, box, title, fallbackIcon);
+            return;
+          }
+          showIconInitials(img, box, title);
+        };
+        img.src = src;
+      })
+      .catch(() => {
+        if (icon !== fallbackIcon && fallbackIcon) {
+          showFallbackIcon(img, box, title, fallbackIcon);
+          return;
+        }
+        showIconInitials(img, box, title);
+      });
+  }
+
+  async function renderableIconUrlWithFallbacks(url) {
+    let lastError = null;
+
+    for (const candidate of wikiImageUrlCandidates(url)) {
+      try {
+        return await renderableIconUrl(candidate);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError || new Error("Image proxy failed");
+  }
+
+  async function renderableIconUrl(url) {
+    if (!isWikiImageUrl(url)) return url;
+
+    const api = extensionApi();
+    if (!api?.runtime?.id || !api.runtime.sendMessage) return url;
+
+    return cachedWikiImageProxy(api, url);
+  }
+
+  function cachedWikiImageProxy(api, url) {
+    const cached = iconImageCache.get(url);
+    if (cached) return cached;
+
+    const request = queueWikiImageProxy(api, url).catch((error) => {
+      iconImageCache.delete(url);
+      throw error;
+    });
+    iconImageCache.set(url, request);
+    return request;
+  }
+
+  function queueWikiImageProxy(api, url) {
+    return new Promise((resolve, reject) => {
+      iconImageQueue.push({ api, url, resolve, reject });
+      drainIconImageQueue();
+    });
+  }
+
+  function drainIconImageQueue() {
+    const limit = Math.max(1, Number(CONFIG.wikiLookupConcurrency) || 1);
+    while (activeIconImageRequests < limit && iconImageQueue.length) {
+      const job = iconImageQueue.shift();
+      activeIconImageRequests += 1;
+      fetchWikiImageViaExtension(job.api, job.url)
+        .then(job.resolve, job.reject)
+        .finally(() => {
+          activeIconImageRequests -= 1;
+          drainIconImageQueue();
+        });
+    }
+  }
+
+  async function fetchWikiImageViaExtension(api, url) {
+    let lastResponse = null;
+    for (let attempt = 0; attempt <= CONFIG.network.retries; attempt += 1) {
+      let response = null;
+      try {
+        response = await runtimeSendMessage(api, { type: "poe2dire:fetch-image", url });
+      } catch (error) {
+        response = {
+          ok: false,
+          status: 0,
+          statusText: error.message || "Network Error",
+          retryAfter: "",
+        };
+      }
+      if (response?.ok && response.dataUrl) return response.dataUrl;
+
+      lastResponse = response || { status: 0, statusText: "Network Error", retryAfter: "" };
+      if (attempt === CONFIG.network.retries || !isRetryableIconResponse(response)) break;
+      await delay(retryDelayMs(lastResponse, attempt));
+    }
+
+    throw new Error(lastResponse?.statusText || "Image proxy failed");
+  }
+
+  function isRetryableIconResponse(response) {
+    if (response?.cfMitigated === "challenge") return true;
+    return RETRYABLE_HTTP_STATUS.has(response?.status || 0);
+  }
+
+  function isWikiImageUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return (
+        parsed.pathname.startsWith("/images/") &&
+        (parsed.origin === "https://www.poewiki.net" || parsed.origin === "https://www.poe2wiki.net")
+      );
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function wikiImageUrlCandidates(url) {
+    const urls = [url];
+    const original = originalWikiImageUrl(url);
+    if (original && original !== url) urls.push(original);
+    return urls;
+  }
+
+  function originalWikiImageUrl(url) {
+    try {
+      const parsed = new URL(url);
+      if (!isWikiImageUrl(url)) return "";
+
+      const match = parsed.pathname.match(/^\/images\/thumb\/([^/]+\/[^/]+\/[^/]+)\/[^/]+$/);
+      if (!match) return "";
+
+      parsed.pathname = `/images/${match[1]}`;
+      return parsed.toString();
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function showIconInitials(img, box, title) {
+    img.remove();
+    box.textContent = iconInitials(title);
+  }
+
+  function showFallbackIcon(img, box, title, fallbackIcon) {
+    box.dataset.pdpIconState = "pdp-icon-default";
+    box.dataset.pdpIconUrl = fallbackIcon;
+    setIconStateClass(box, "pdp-icon-default");
+    renderableIconUrl(fallbackIcon)
+      .then((src) => {
+        img.onload = () => setIconStateClass(box, "pdp-icon-default");
+        img.onerror = () => showIconInitials(img, box, title);
+        img.src = src;
+      })
+      .catch(() => showIconInitials(img, box, title));
   }
 
   function iconInitials(title) {
@@ -209,9 +402,19 @@
 
   function iconStateClass(group, isFallback) {
     if (!isFallback) return "pdp-icon-resolved";
-    if (!state.wikiDone) return "pdp-icon-pending";
     if (group.source === "missing") return "pdp-icon-missing";
+    if (group.source === "default") return "pdp-icon-default";
+    if (!state.wikiDone) return "pdp-icon-pending";
     return "pdp-icon-default";
+  }
+
+  function initialIconStateClass(finalClass) {
+    return finalClass === "pdp-icon-resolved" ? "pdp-icon-pending" : finalClass;
+  }
+
+  function setIconStateClass(box, nextClass) {
+    box.classList.remove("pdp-icon-pending", "pdp-icon-resolved", "pdp-icon-missing", "pdp-icon-default");
+    box.classList.add(nextClass);
   }
 
   function highlightChange(doc, text) {

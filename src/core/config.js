@@ -3,7 +3,7 @@
       { name: "PoE2Wiki", api: "https://www.poe2wiki.net/api.php" },
       { name: "PoEWiki", api: "https://www.poewiki.net/api.php" },
     ],
-    wikiLookupConcurrency: 40,
+    wikiLookupConcurrency: 2,
     fallbackIcon: "https://www.poewiki.net/images/b/b6/Scroll_of_Wisdom_inventory_icon.png",
     cache: {
       namespace: "PoE2DireCache-25-05-2026:",

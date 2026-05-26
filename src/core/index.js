@@ -15,13 +15,21 @@
 
     const tokens = collectTokens(root);
     const patch = parsePatch(tokens);
+    state.wikiDone = false;
     renderPatchPage(document, root, patch);
 
-    return resolveIcons(patch)
-      .then((resolvedPatch) => {
-        if (runId !== state.renderRunId) return null;
+    const renderResolvedPatchNow = (resolvedPatch) => {
+      if (runId !== state.renderRunId) return false;
+      if (!updatePatchIcons(document, resolvedPatch)) {
         renderPatchPage(document, root, resolvedPatch);
-        return resolvedPatch;
+      }
+      return true;
+    };
+    const renderResolvedPatch = schedulePatchIconRender(renderResolvedPatchNow);
+
+    resolveIcons(patch, renderResolvedPatch)
+      .then((resolvedPatch) => {
+        return renderResolvedPatchNow(resolvedPatch) ? resolvedPatch : null;
       })
       .catch((error) => {
         if (runId !== state.renderRunId) return null;
@@ -30,6 +38,30 @@
         console.warn("[PoE2Dire] Wiki icon lookup failed:", error);
         return patch;
       });
+
+    return patch;
+  }
+
+  function schedulePatchIconRender(renderNow) {
+    let scheduled = false;
+    let pendingPatch = null;
+
+    return (patch) => {
+      pendingPatch = patch;
+      if (scheduled) return true;
+
+      scheduled = true;
+      const schedule = typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : (callback) => setTimeout(callback, 16);
+      schedule(() => {
+        scheduled = false;
+        const nextPatch = pendingPatch;
+        pendingPatch = null;
+        if (nextPatch) renderNow(nextPatch);
+      });
+      return true;
+    };
   }
 
   function setupExtensionMessages() {

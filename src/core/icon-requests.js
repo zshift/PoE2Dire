@@ -6,7 +6,7 @@
       const response = await fetchJsonResponse(url);
       if (response.ok) return response.json;
 
-      if (attempt === CONFIG.network.retries || !RETRYABLE_HTTP_STATUS.has(response.status)) {
+      if (attempt === CONFIG.network.retries || !isRetryableWikiResponse(response)) {
         throw new Error(`${response.status} ${response.statusText}`);
       }
 
@@ -22,12 +22,17 @@
 
     try {
       const response = await fetch(url);
+      const contentType = response.headers.get("Content-Type") || "";
+      const cfMitigated = response.headers.get("cf-mitigated") || "";
+      const isJson = contentType.toLowerCase().includes("json");
       return {
-        ok: response.ok,
-        status: response.status,
-        statusText: response.statusText,
+        ok: response.ok && isJson,
+        status: response.ok && !isJson ? 415 : response.status,
+        statusText: response.ok && !isJson ? "Unsupported Media Type" : response.statusText,
         retryAfter: response.headers.get("Retry-After") || "",
-        json: response.ok ? await response.json() : null,
+        cfMitigated,
+        contentType,
+        json: response.ok && isJson ? await response.json() : null,
       };
     } catch (error) {
       return {
@@ -35,6 +40,8 @@
         status: 0,
         statusText: error.message || "Network Error",
         retryAfter: "",
+        cfMitigated: "",
+        contentType: "",
         json: null,
       };
     }
@@ -81,4 +88,9 @@
 
   function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function isRetryableWikiResponse(response) {
+    if (response?.cfMitigated === "challenge") return false;
+    return RETRYABLE_HTTP_STATUS.has(response?.status || 0);
   }

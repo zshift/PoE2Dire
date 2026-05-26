@@ -1,26 +1,166 @@
   const WIKI_PLACEHOLDER_IMAGE = /Questionmark|Help\.svg|Level_up_icon/i;
+  const ICON_THUMB_WIDTH = 108;
 
-  async function queryWikiIconSource(endpoint, jobs) {
+  async function queryWikiIconSource(endpoint, jobs, onResult) {
     const found = new Map();
     const failed = new Set();
 
-    await mapWithConcurrency(jobs, CONFIG.wikiLookupConcurrency, async (job) => {
+    await queryPredictableFileIcons(endpoint, jobs, found, onResult);
+
+    const remainingJobs = jobs.filter((job) => !found.has(job.key));
+    await mapWithConcurrency(remainingJobs, CONFIG.wikiLookupConcurrency, async (job) => {
       try {
         const image = await queryWikiIcon(endpoint, job);
-        if (image) found.set(job.key, image);
+        if (image) {
+          found.set(job.key, image);
+          if (onResult) onResult(job, image, false);
+        } else if (onResult) {
+          onResult(job, null, false);
+        }
       } catch (error) {
         failed.add(job.key);
+        if (onResult) onResult(job, null, true);
       }
     });
 
     return { found, failed };
   }
 
-  async function queryWikiIcon(endpoint, job) {
-    for (const title of iconLookupCandidateTitles(job.title, job.kind)) {
-      const image = await queryWikiPageImage(endpoint, title, job.kind);
-      if (image) return image;
+  async function queryPredictableFileIcons(endpoint, jobs, found, onResult) {
+    const lookups = predictableFileIconLookups(jobs);
+    if (!lookups.length) return;
+
+    const byFile = new Map();
+    const fileTitles = [];
+    lookups.forEach((lookup) => {
+      const key = normalFileTitle(lookup.fileTitle);
+      const existing = byFile.get(key) || [];
+      existing.push(lookup.job);
+      if (!byFile.has(key)) fileTitles.push(lookup.fileTitle);
+      byFile.set(key, existing);
+    });
+
+    for (const chunk of chunks(fileTitles, 40)) {
+      let json = null;
+      try {
+        json = await fetchImageInfo(endpoint, chunk);
+      } catch (error) {
+        return;
+      }
+
+      Object.values(json.query?.pages || {}).forEach((page) => {
+        const imageUrl = page.imageinfo?.[0]?.thumburl || page.imageinfo?.[0]?.url;
+        if (!imageUrl) return;
+
+        const image = {
+          url: imageUrl,
+          source: `${endpoint.name} File`,
+        };
+        const matchedJobs = byFile.get(normalFileTitle(page.title)) || [];
+        matchedJobs.forEach((job) => {
+          if (found.has(job.key)) return;
+          found.set(job.key, image);
+          if (onResult) onResult(job, image, false);
+        });
+      });
     }
+  }
+
+  function predictableFileIconLookups(jobs) {
+    const seen = new Set();
+    const lookups = [];
+
+    jobs
+      .filter((job) => job.kind === "support" || job.kind === "item" || job.kind === "skill")
+      .forEach((job) => {
+        iconLookupCandidateTitles(job.title, job.kind).forEach((title) => {
+          predictableFileIconTitles(title, job.kind).forEach((fileTitle) => {
+            const key = `${job.key}:${normalFileTitle(fileTitle)}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            lookups.push({ job, fileTitle });
+          });
+        });
+      });
+
+    return lookups;
+  }
+
+  function predictableFileIconTitles(title, kind) {
+    if (kind === "support") return supportInventoryIconFileTitles(title);
+    if (kind === "skill") return [skillIconFileTitle(title), inventoryIconFileTitle(title)];
+    return [inventoryIconFileTitle(title)];
+  }
+
+  function supportInventoryIconFileTitles(title) {
+    const titles = [inventoryIconFileTitle(title)];
+    const clean = cleanTitle(title);
+    if (!/\s+(?:III|II|I)$/i.test(clean)) {
+      titles.push(inventoryIconFileTitle(`${clean} I`));
+    }
+    return titles;
+  }
+
+  function inventoryIconFileTitle(title) {
+    return `File:${cleanTitle(title).replace(/\s+/g, "_")}_inventory_icon.png`;
+  }
+
+  function skillIconFileTitle(title) {
+    return `File:${cleanTitle(title).replace(/\s+/g, "_")}_skill_icon.png`;
+  }
+
+  async function fetchImageInfo(endpoint, fileTitles) {
+    const url = new URL(endpoint.api);
+    url.searchParams.set("origin", "*");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("action", "query");
+    url.searchParams.set("titles", fileTitles.join("|"));
+    url.searchParams.set("prop", "imageinfo");
+    url.searchParams.set("iiprop", "url");
+    url.searchParams.set("iiurlwidth", String(ICON_THUMB_WIDTH));
+
+    try {
+      return await fetchImageInfoDirect(url.toString());
+    } catch (error) {
+      return fetchJsonWithRetry(url.toString());
+    }
+  }
+
+  async function fetchImageInfoDirect(url) {
+    const response = await fetch(url);
+    const contentType = response.headers.get("Content-Type") || "";
+    if (!response.ok || !contentType.toLowerCase().includes("json")) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  function normalFileTitle(title) {
+    return cleanTitle(title).replace(/_/g, " ").toLowerCase();
+  }
+
+  function chunks(values, size) {
+    const result = [];
+    for (let index = 0; index < values.length; index += size) {
+      result.push(values.slice(index, index + size));
+    }
+    return result;
+  }
+
+  async function queryWikiIcon(endpoint, job) {
+    let lastError = null;
+
+    for (const title of iconLookupCandidateTitles(job.title, job.kind)) {
+      try {
+        const image = await queryWikiPageImage(endpoint, title, job.kind);
+        if (image) return image;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) throw lastError;
     return null;
   }
 
@@ -105,13 +245,22 @@
       );
     }
 
-    if (kind === "skill" || kind === "support") {
+    if (kind === "skill") {
       return (
         titled.find((image) => imageSrc(image).includes("_skill_icon")) ||
         container.querySelector("img[src*='_skill_icon']") ||
         titled.find((image) => imageSrc(image).includes("_inventory_icon")) ||
         inventoryImage(container) ||
         images.find(isRealWikiImage) ||
+        null
+      );
+    }
+
+    if (kind === "support") {
+      return (
+        titled.find((image) => imageSrc(image).includes("_inventory_icon")) ||
+        inventoryImage(container) ||
+        titled.find(isRealWikiImage) ||
         null
       );
     }
