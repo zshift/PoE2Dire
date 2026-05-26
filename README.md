@@ -1,3 +1,6 @@
+> [!CAUTION]
+> You are too early here! I'm still waiting for stores to approve the plugin for you to use! But if you know what you are doing, feel free to stay, otherwise, please, comeback later!
+
 # PoE2Dire
 
 Extension to rendering Path of Exile patch notes in a Dota2-style layout.
