@@ -24,7 +24,7 @@ TBD
 
 [Firefox Browser Add-ons Page](https://addons.mozilla.org/en-US/firefox/addon/poe2dire/)
 
-## Phones
+## Phones (Do you guys not have phones?)
 
 > [!CAUTION]
 > This will download the remote code (`https://aisatan.github.io/PoE2Dire/PoE2Dire-bookmarklet.js`) and executing it on your browser.
