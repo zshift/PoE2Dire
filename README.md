@@ -26,7 +26,9 @@ TBD
 
 ## Phones
 
-> Note! This will download the remote code (`https://aisatan.github.io/PoE2Dire/PoE2Dire-bookmarklet.js`) and executing it on your browser. It's not required, but I suggest to stay safe and use the incognite mode.
+> [!CAUTION]
+> This will download the remote code (`https://aisatan.github.io/PoE2Dire/PoE2Dire-bookmarklet.js`) and executing it on your browser.
+> It's not required - but I strongly suggest to stay safe and use the incognite mode.
 
 This is for phones or browsers where you cannot/don't want to install the extension.
 
