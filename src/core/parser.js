@@ -19,6 +19,7 @@
       version,
       eyebrow: "Gameplay Update",
       sections: [],
+      toc: [],
     };
 
     let currentSection = null;
@@ -27,6 +28,10 @@
 
     for (let index = 0; index < tokens.length; index += 1) {
       const token = tokens[index];
+      if (token.type === "toc") {
+        if (!currentSection) patch.toc.push(...(token.entries || []));
+        continue;
+      }
       if (token === titleToken || token.type === "image") continue;
       if (token.text === title || token.text === "Table of Contents") continue;
 
@@ -60,7 +65,7 @@
       if (token.type === "text" && isTrailingNote(tokens, index, currentSection)) {
         currentSection = addSection(patch, "Notes", "");
         currentGroup = findOrAddGroup(currentSection, "Patch Notes", token.image, token.text);
-        currentGroup.items.push(formatChange(token.text, ""));
+        currentGroup.items.push(changeItem(formatChange(token.text, ""), token));
         continue;
       }
 
@@ -83,7 +88,7 @@
 
         if (token.type === "li" || token.type === "text") {
           currentGroup = currentGroup || findOrAddGroup(currentSection, "Patch Notes Update", token.image);
-          addUpdateItem(currentGroup, formatChange(token.text, ""));
+          addUpdateItem(currentGroup, changeItem(formatChange(token.text, ""), token));
           continue;
         }
       }
@@ -114,7 +119,7 @@
           ? findOrAddGroup(currentSection, entity || currentSection.title, token.image, token.text)
           : currentGroup || findOrAddGroup(currentSection, currentSection.title, token.image, token.text);
 
-        targetGroup.items.push(formatChange(token.text, targetGroup.title));
+        targetGroup.items.push(changeItem(formatChange(token.text, targetGroup.title), token));
         if (entity && !targetGroup.wikiTitle) targetGroup.wikiTitle = entity;
       }
     }
@@ -122,7 +127,7 @@
     if (patch.sections.length && introTokens.length) {
       const section = addSection(patch, "Overview", "", "start");
       const group = addGroup(section, "Patch Notes", "");
-      group.items.push(...introTokens.map((token) => token.text));
+      group.items.push(...introTokens.map((token) => changeItem(token.text, token)));
     }
 
     if (!patch.sections.length && introTokens.length) {
@@ -133,12 +138,12 @@
 
       const section = addSection(patch, "General Updates", "");
       const group = addGroup(section, "Patch Notes", "");
-      group.items.push(...introTokens.slice(0, noteStart).map((token) => token.text));
+      group.items.push(...introTokens.slice(0, noteStart).map((token) => changeItem(token.text, token)));
 
       if (noteStart < introTokens.length) {
         const notes = addSection(patch, "Notes", "");
         const notesGroup = addGroup(notes, "Patch Notes", "");
-        notesGroup.items.push(...introTokens.slice(noteStart).map((token) => token.text));
+        notesGroup.items.push(...introTokens.slice(noteStart).map((token) => changeItem(token.text, token)));
       }
     }
 
@@ -233,6 +238,10 @@
     }
 
     return true;
+  }
+
+  function changeItem(text, token) {
+    return { text, links: token.links || [] };
   }
 
   function addUpdateItem(group, item) {

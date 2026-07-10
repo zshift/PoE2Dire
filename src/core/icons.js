@@ -3,9 +3,11 @@
     const jobs = collectIconJobs(groups);
 
     state.wikiDone = false;
+    state.iconStatus = null;
 
     if (!jobs.length) {
       state.wikiDone = true;
+      renderWikiStatusPill(document);
       return patch;
     }
 
@@ -20,9 +22,19 @@
     const resolved = new Map();
     const knownMissing = new Set();
     const lookupFailed = new Set();
+    const status = { total: jobs.length, settled: 0, failed: 0, done: false };
+    state.iconStatus = status;
+
+    const updateIconStatus = () => {
+      status.settled = Math.min(jobs.length, resolved.size + knownMissing.size + lookupFailed.size);
+      status.failed = lookupFailed.size;
+      renderWikiStatusPill(document);
+    };
+
     const stored = await readStoredIconResults(store, jobs, storeKeys, resolved, knownMissing);
     applyResolvedIconResults(groups, resolved);
     applyMissingIconResults(groups, knownMissing);
+    updateIconStatus();
     notifyIconUpdate(onUpdate, patch);
 
     for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex += 1) {
@@ -37,6 +49,7 @@
         if (image) {
           resolved.set(job.key, image);
           applyResolvedIconResults(groups, new Map([[job.key, image]]));
+          updateIconStatus();
           notifyIconUpdate(onUpdate, patch);
           return;
         }
@@ -50,6 +63,7 @@
           knownMissing.add(job.key);
           applyMissingIconResults(groups, new Set([job.key]));
         }
+        updateIconStatus();
         notifyIconUpdate(onUpdate, patch);
       });
       result.found.forEach((image, key) => resolved.set(key, image));
@@ -60,8 +74,26 @@
     await writeStoredIconResults(store, jobs, storeKeys, stored, resolved, lookupFailed);
 
     state.wikiDone = true;
+    status.done = true;
+    updateIconStatus();
+    finishWikiStatus(status);
     notifyIconUpdate(onUpdate, patch);
     return patch;
+  }
+
+  function finishWikiStatus(status) {
+    if (!status.failed) {
+      if (state.iconStatus === status) state.iconStatus = null;
+      renderWikiStatusPill(document);
+      return;
+    }
+
+    setTimeout(() => {
+      if (state.iconStatus === status) {
+        state.iconStatus = null;
+        renderWikiStatusPill(document);
+      }
+    }, CONFIG.ui.statusErrorHideMs);
   }
 
   function collectIconJobs(groups) {

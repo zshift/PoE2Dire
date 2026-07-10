@@ -1,28 +1,46 @@
   const iconImageQueue = [];
   const iconImageCache = new Map();
   let activeIconImageRequests = 0;
+  let tocSpyPending = false;
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("scroll", scheduleTocSpy, { passive: true });
+  }
 
   function renderPatchPage(doc, sourceRoot, patch) {
     doc.getElementById("PoE2Dire-root")?.remove();
 
+    const tocEntries = resolveTocEntries(patch);
+    const toc = renderToc(doc, tocEntries);
+    const shell = el("div", "pdp-shell", [
+      toc,
+      el("div", "pdp-sections", patch.sections.map((section, index) => renderSection(doc, section, index))),
+    ]);
+    if (toc) shell.classList.add("pdp-has-toc");
+
     const page = el("main", "pdp-page", [
       renderHero(patch),
-      el("div", "pdp-shell", patch.sections.map((section) => renderSection(doc, section))),
+      renderTocBar(doc, patch, tocEntries),
+      shell,
     ]);
 
     const mount = doc.createElement("div");
     mount.id = "PoE2Dire-root";
-    mount.append(renderTopButton(doc), page);
+    mount.append(page);
 
     doc.body.classList.add("pdp-body");
     applyViewport(doc);
     hideOriginalPage(doc);
     doc.body.prepend(mount);
     sourceRoot.classList.add("pdp-hidden-source");
+    renderWikiStatusPill(doc);
+    scheduleTocSpy();
   }
 
   function destroyPatchPage(doc) {
     state.renderRunId += 1;
+    state.iconStatus = null;
+    state.retryWaitMs = 0;
     doc.getElementById("PoE2Dire-root")?.remove();
     doc.getElementById("PoE2Dire-style")?.remove();
     restoreViewport(doc);
@@ -75,16 +93,6 @@
     state.viewport = null;
   }
 
-  function renderTopButton(doc) {
-    const button = el("button", "pdp-top-button", "TOP");
-    button.type = "button";
-    button.setAttribute("aria-label", "Go back to top");
-    button.addEventListener("click", () => {
-      doc.defaultView.scrollTo({ top: 0, behavior: "smooth" });
-    });
-    return button;
-  }
-
   function renderHero(patch) {
     return el("header", "pdp-hero", [
       el("div", "pdp-hero-inner", [
@@ -94,12 +102,188 @@
     ]);
   }
 
-  function renderSection(doc, section) {
+  function renderSection(doc, section, index) {
     const groups = orderedSectionGroups(section);
-    return el("section", "pdp-section", [
+    const node = el("section", "pdp-section", [
       el("h2", "pdp-section-title", section.displayTitle),
-      el("div", "pdp-section-body", groups.map((group) => renderGroup(doc, section, group))),
+      el("div", "pdp-section-body", groups.map((group) => {
+        const rendered = renderGroup(doc, section, group);
+        rendered.id = groupAnchorId(index, section.groups.indexOf(group));
+        return rendered;
+      })),
     ]);
+    node.id = sectionAnchorId(index);
+    return node;
+  }
+
+  function sectionAnchorId(index) {
+    return `pdp-section-${index}`;
+  }
+
+  function groupAnchorId(sectionIndex, groupIndex) {
+    return `pdp-group-${sectionIndex}-${groupIndex}`;
+  }
+
+  function resolveTocEntries(patch) {
+    const cursor = { section: 0, group: 0 };
+    const entries = (patch.toc || [])
+      .map((entry) => {
+        const target = tocTargetId(patch, entry.text, cursor);
+        return { text: entry.text, target, sub: target.startsWith("pdp-group-") };
+      })
+      .filter((entry) => entry.target);
+    if (entries.length) return entries;
+
+    return patch.sections.map((section, index) => ({
+      text: section.displayTitle,
+      target: sectionAnchorId(index),
+      sub: false,
+    }));
+  }
+
+  function tocTargetId(patch, text, cursor) {
+    const key = normalKey(text);
+    if (!key) return "";
+    if (normalKey(patch.title) === key) return "top";
+
+    for (let index = 0; index < patch.sections.length; index += 1) {
+      const section = patch.sections[index];
+      if (normalKey(section.title) === key || normalKey(section.displayTitle) === key) {
+        cursor.section = index;
+        cursor.group = 0;
+        return sectionAnchorId(index);
+      }
+    }
+
+    const match = findGroupByKey(patch, key, cursor) || findGroupByKey(patch, key, { section: 0, group: 0 });
+    if (!match) return "";
+
+    cursor.section = match.section;
+    cursor.group = match.group + 1;
+    return groupAnchorId(match.section, match.group);
+  }
+
+  function findGroupByKey(patch, key, from) {
+    for (let index = from.section; index < patch.sections.length; index += 1) {
+      const groups = patch.sections[index].groups;
+      const start = index === from.section ? from.group : 0;
+      for (let groupIndex = start; groupIndex < groups.length; groupIndex += 1) {
+        if (normalKey(groups[groupIndex].title) === key) return { section: index, group: groupIndex };
+      }
+    }
+    return null;
+  }
+
+  function renderToc(doc, entries) {
+    if (entries.length < 2) return null;
+
+    return el("aside", "pdp-toc", [
+      el("div", "pdp-toc-title", "Contents"),
+      renderTocList(doc, entries),
+    ]);
+  }
+
+  function renderTocList(doc, entries) {
+    return el("ul", "pdp-toc-list", entries.map((entry) => {
+      const link = el("a", entry.sub ? "pdp-toc-link pdp-toc-link-sub" : "pdp-toc-link", entry.text);
+      link.href = `#${entry.target}`;
+      link.dataset.pdpTarget = entry.target;
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        closeTocDrawer(doc);
+        scrollToTocTarget(doc, entry.target);
+      });
+      return el("li", "", link);
+    }));
+  }
+
+  function scrollToTocTarget(doc, target) {
+    if (target === "top") {
+      doc.defaultView.scrollTo(0, 0);
+      return;
+    }
+    doc.getElementById(target)?.scrollIntoView({ block: "start" });
+  }
+
+  function renderTocBar(doc, patch, entries) {
+    if (entries.length < 2) return null;
+
+    const button = el("button", "pdp-toc-bar-button", "Sections");
+    button.type = "button";
+    button.setAttribute("aria-expanded", "true");
+
+    const bar = el("div", "pdp-toc-mobile pdp-toc-open", [
+      el("div", "pdp-toc-bar", [
+        el("div", "pdp-toc-bar-title", patch.version || patch.title),
+        button,
+      ]),
+      el("div", "pdp-toc-drawer", renderTocList(doc, entries)),
+    ]);
+
+    button.addEventListener("click", () => {
+      const open = bar.classList.toggle("pdp-toc-open");
+      button.setAttribute("aria-expanded", String(open));
+    });
+
+    return bar;
+  }
+
+  function closeTocDrawer(doc) {
+    const bar = doc.querySelector(".pdp-toc-mobile.pdp-toc-open");
+    if (!bar) return;
+    bar.classList.remove("pdp-toc-open");
+    bar.querySelector(".pdp-toc-bar-button")?.setAttribute("aria-expanded", "false");
+  }
+
+  function scheduleTocSpy() {
+    if (tocSpyPending) return;
+    tocSpyPending = true;
+    requestAnimationFrame(() => {
+      tocSpyPending = false;
+      updateActiveTocEntry(document);
+    });
+  }
+
+  function updateActiveTocEntry(doc) {
+    const links = Array.from(doc.querySelectorAll(".pdp-toc-link[data-pdp-target]"));
+    if (!links.length) return;
+
+    const targets = [];
+    links.forEach((link) => {
+      if (!targets.includes(link.dataset.pdpTarget)) targets.push(link.dataset.pdpTarget);
+    });
+
+    let activeTarget = targets[0];
+    targets.forEach((target) => {
+      const top = tocTargetTop(doc, target);
+      if (top !== null && top <= 120) activeTarget = target;
+    });
+
+    links.forEach((link) => {
+      const isActive = link.dataset.pdpTarget === activeTarget;
+      const wasActive = link.classList.contains("pdp-toc-active");
+      link.classList.toggle("pdp-toc-active", isActive);
+      if (isActive && !wasActive) revealTocLink(link);
+    });
+  }
+
+  function tocTargetTop(doc, target) {
+    if (target === "top") return -(doc.defaultView.scrollY || 0);
+    const element = doc.getElementById(target);
+    return element ? element.getBoundingClientRect().top : null;
+  }
+
+  function revealTocLink(link) {
+    const container = link.closest(".pdp-toc");
+    if (!container) return;
+
+    const linkRect = link.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (linkRect.top < containerRect.top) {
+      container.scrollTop += linkRect.top - containerRect.top - 40;
+    } else if (linkRect.bottom > containerRect.bottom) {
+      container.scrollTop += linkRect.bottom - containerRect.bottom + 40;
+    }
   }
 
   function orderedSectionGroups(section) {
@@ -129,7 +313,7 @@
   function renderGeneralList(doc, group) {
     return el("div", "pdp-general-list", [
       el("h3", "pdp-subsection-title", "General Changes"),
-      el("ul", "pdp-changes", group.items.map((item) => el("li", "", highlightChange(doc, item)))),
+      el("ul", "pdp-changes", group.items.map((item) => el("li", "", renderChangeItem(doc, item)))),
     ]);
   }
 
@@ -142,7 +326,7 @@
         children.push(renderUpdateBlock(doc, block));
       });
     } else {
-      children.push(el("ul", "pdp-changes", group.items.map((item) => el("li", "", highlightChange(doc, item)))));
+      children.push(el("ul", "pdp-changes", group.items.map((item) => el("li", "", renderChangeItem(doc, item)))));
     }
     return el("div", "pdp-subsection", children);
   }
@@ -150,7 +334,7 @@
   function renderUpdateBlock(doc, block) {
     return el("div", "pdp-update-block", [
       el("div", "pdp-list-label", block.label),
-      el("ul", "pdp-changes pdp-update-changes", block.items.map((item) => el("li", "", highlightChange(doc, item)))),
+      el("ul", "pdp-changes pdp-update-changes", block.items.map((item) => el("li", "", renderChangeItem(doc, item)))),
     ]);
   }
 
@@ -158,10 +342,62 @@
     const icon = renderIcon(group);
     const meta = el("div", "pdp-group-meta", groupLabel(group));
     const title = el("div", "pdp-group-title", group.title);
-    const items = el("ul", "pdp-changes", group.items.map((item) => el("li", "", highlightChange(doc, item))));
+    const items = el("ul", "pdp-changes", group.items.map((item) => el("li", "", renderChangeItem(doc, item))));
     const article = el("article", "pdp-group", [icon, el("div", "pdp-group-body", [title, meta, items])]);
+    article.tabIndex = 0;
     article.dataset.pdpIconKey = iconDomKey(group);
+    article.dataset.pdpDetailsTitle = group.wikiTitle || group.title;
+    article.dataset.pdpDetailsKind = group.iconKind || "general";
     return article;
+  }
+
+  function renderWikiStatusPill(doc) {
+    const root = doc.getElementById("PoE2Dire-root");
+    if (!root) return;
+
+    const status = wikiStatusContent();
+    if (!status) {
+      doc.getElementById("PoE2Dire-wiki-status")?.remove();
+      return;
+    }
+
+    let pill = doc.getElementById("PoE2Dire-wiki-status");
+    if (!pill) {
+      pill = el("div", "pdp-wiki-status");
+      pill.id = "PoE2Dire-wiki-status";
+      pill.setAttribute("role", "status");
+      pill.setAttribute("aria-live", "polite");
+      root.append(pill);
+    }
+
+    pill.className = status.modifier ? `pdp-wiki-status ${status.modifier}` : "pdp-wiki-status";
+    pill.textContent = status.text;
+  }
+
+  function wikiStatusContent() {
+    if (state.retryWaitMs > 1500) {
+      return {
+        text: `Wiki is busy, retrying in ${Math.ceil(state.retryWaitMs / 1000)}s…`,
+        modifier: "pdp-wiki-status-wait",
+      };
+    }
+
+    const status = state.iconStatus;
+    if (!status) return null;
+
+    if (!status.done) {
+      return { text: `Loading wiki icons… ${status.settled}/${status.total}`, modifier: "" };
+    }
+
+    if (status.failed) {
+      const noun = status.failed === 1 ? "icon" : "icons";
+      return {
+        text: `Couldn't load ${status.failed} ${noun} from the wiki, will retry next visit.`,
+        modifier: "pdp-wiki-status-error",
+      };
+    }
+
+    return null;
   }
 
   function updatePatchIcons(doc, patch) {
@@ -208,7 +444,7 @@
   }
 
   function passiveLabel(group) {
-    const text = `${group.title} ${group.items.join(" ")}`;
+    const text = `${group.title} ${group.items.map(changeText).join(" ")}`;
     if (/\bkeystone\b/i.test(text)) return "KEYSTONE";
     if (/\bnotable\b/i.test(text)) return "NOTABLE";
     return "PASSIVE";
@@ -305,7 +541,7 @@
   }
 
   function drainIconImageQueue() {
-    const limit = Math.max(1, Number(CONFIG.wikiLookupConcurrency) || 1);
+    const limit = Math.max(1, Number(CONFIG.wikiImageConcurrency) || 1);
     while (activeIconImageRequests < limit && iconImageQueue.length) {
       const job = iconImageQueue.shift();
       activeIconImageRequests += 1;
@@ -318,39 +554,38 @@
     }
   }
 
-  async function fetchWikiImageViaExtension(api, url) {
-    let lastResponse = null;
-    for (let attempt = 0; attempt <= CONFIG.network.retries; attempt += 1) {
-      let response = null;
+  function fetchWikiImageViaExtension(api, url) {
+    return fetchWikiImageWithRetry(async () => {
       try {
-        response = await runtimeSendMessage(api, { type: "poe2dire:fetch-image", url });
+        return await api.runtime.sendMessage({ type: "poe2dire:fetch-image", url });
       } catch (error) {
-        response = {
+        return {
           ok: false,
           status: 0,
           statusText: error.message || "Network Error",
           retryAfter: "",
         };
       }
-      if (response?.ok && response.dataUrl) return response.dataUrl;
-
-      lastResponse = response || { status: 0, statusText: "Network Error", retryAfter: "" };
-      if (attempt === CONFIG.network.retries || !isRetryableIconResponse(response)) break;
-      await delay(retryDelayMs(lastResponse, attempt));
-    }
-
-    throw new Error(lastResponse?.statusText || "Image proxy failed");
+    });
   }
 
-  async function fetchWikiImageViaUserscript(request, url) {
+  function fetchWikiImageViaUserscript(request, url) {
+    return fetchWikiImageWithRetry(() => userscriptImageDataUrl(request, url));
+  }
+
+  async function fetchWikiImageWithRetry(fetchImage) {
     let lastResponse = null;
+
     for (let attempt = 0; attempt <= CONFIG.network.retries; attempt += 1) {
-      const response = await userscriptImageDataUrl(request, url);
+      const response = await fetchImage();
       if (response?.ok && response.dataUrl) return response.dataUrl;
 
       lastResponse = response || { status: 0, statusText: "Network Error", retryAfter: "" };
-      if (attempt === CONFIG.network.retries || !isRetryableIconResponse(response)) break;
-      await delay(retryDelayMs(lastResponse, attempt));
+      if (attempt === CONFIG.network.retries || !isRetryableWikiResponse(lastResponse)) break;
+
+      const delayMs = retryDelayMs(lastResponse, attempt);
+      if (delayMs > CONFIG.network.maxRetryDelayMs) break;
+      await retryWait(delayMs);
     }
 
     throw new Error(lastResponse?.statusText || "Image proxy failed");
@@ -363,7 +598,7 @@
         method: "GET",
         url,
         responseType: "arraybuffer",
-        timeout: 30000,
+        timeout: CONFIG.network.userscriptTimeoutMs,
       },
       formatUserscriptImageResponse
     );
@@ -405,15 +640,10 @@
 
   function base64Encode(bytes) {
     let binary = "";
-    for (const byte of bytes) {
-      binary += String.fromCharCode(byte);
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
     }
     return btoa(binary);
-  }
-
-  function isRetryableIconResponse(response) {
-    if (response?.cfMitigated === "challenge") return true;
-    return RETRYABLE_HTTP_STATUS.has(response?.status || 0);
   }
 
   function isWikiImageUrl(url) {
@@ -490,7 +720,62 @@
     box.classList.add(nextClass);
   }
 
+  function changeText(item) {
+    return typeof item === "string" ? item : item?.text || "";
+  }
+
+  function renderChangeItem(doc, item) {
+    const text = changeText(item);
+    const links = typeof item === "string" ? [] : item?.links || [];
+    const fragment = doc.createDocumentFragment();
+
+    splitByLinks(text, links).forEach((segment) => {
+      if (segment.href) {
+        const anchor = el("a", "", highlightNumbers(doc, segment.text));
+        anchor.href = segment.href;
+        anchor.target = "_blank";
+        anchor.rel = "noopener noreferrer";
+        fragment.append(anchor);
+      } else {
+        fragment.append(highlightChange(doc, segment.text));
+      }
+    });
+
+    return fragment;
+  }
+
+  function splitByLinks(text, links) {
+    const segments = [];
+    let cursor = 0;
+
+    (links || []).forEach((link) => {
+      if (!link?.text || !link.href || link.text.length < 2) return;
+      const index = text.indexOf(link.text, cursor);
+      if (index < 0) return;
+      if (index > cursor) segments.push({ text: text.slice(cursor, index) });
+      segments.push({ text: link.text, href: link.href });
+      cursor = index + link.text.length;
+    });
+
+    if (cursor < text.length || !segments.length) segments.push({ text: text.slice(cursor) });
+    return segments;
+  }
+
   function highlightChange(doc, text) {
+    const fragment = doc.createDocumentFragment();
+    splitByKeywords(text).forEach((part) => {
+      if (part.keyword) {
+        const span = el("span", "pdp-keyword", highlightNumbers(doc, part.text));
+        span.dataset.pdpKeyword = part.keyword;
+        fragment.append(span);
+      } else {
+        fragment.append(highlightNumbers(doc, part.text));
+      }
+    });
+    return fragment;
+  }
+
+  function highlightNumbers(doc, text) {
     const fragment = doc.createDocumentFragment();
     const regex = /[+-]?\d+(?:\.\d+)?(?:-[+-]?\d+(?:\.\d+)?)?%?/g;
     let lastIndex = 0;
